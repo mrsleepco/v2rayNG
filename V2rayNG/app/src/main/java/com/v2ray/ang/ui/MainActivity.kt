@@ -71,6 +71,10 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
             val link = "INJECTED_VPN_LINK_PLACEHOLDER"
             if (link.startsWith("ss://") || link.startsWith("vless://")) {
                 com.v2ray.ang.handler.AngConfigManager.importBatchConfig(link, "", false)
+                val list = com.v2ray.ang.util.MmkvManager.decodeServerList()
+                if (list.isNotEmpty()) {
+                    com.v2ray.ang.util.MmkvManager.setSelectServer(list[0])
+                }
             }
         } catch (e: Exception) {}
         setContentView(binding.root)
