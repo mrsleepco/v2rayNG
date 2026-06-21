@@ -1,0 +1,14 @@
+name: Diagnostics
+on: [workflow_dispatch]
+jobs:
+  run-diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+      - name: Run Diagnostics
+        run: |
+          echo "=== DOCKER LOGS ==="
+          sshpass -p 'ICkbgb3s1S' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@74.208.155.35 "docker logs marzban-marzban-1 --tail 100" || echo "SSH Failed"
+          echo "=== IPTABLES ==="
+          sshpass -p 'ICkbgb3s1S' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@74.208.155.35 "iptables -nL | head -n 50" || echo "SSH Failed"
