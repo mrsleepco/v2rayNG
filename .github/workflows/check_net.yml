@@ -1,0 +1,20 @@
+name: Check Network Load
+on: [workflow_dispatch]
+jobs:
+  run-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+      - name: Check Network States
+        run: |
+          sshpass -p 'ICkbgb3s1S' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@74.208.155.35 << 'EOF'
+            echo "--- TCP STATES ---"
+            ss -s
+            echo "--- SYN_RECV COUNT ---"
+            netstat -ant | grep SYN_RECV | wc -l
+            echo "--- TOP IPS ---"
+            netstat -ntu | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr | head -n 10
+            echo "--- UPTIME ---"
+            uptime
+EOF
