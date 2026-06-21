@@ -1,0 +1,28 @@
+name: Fix Server UDP
+on: [workflow_dispatch]
+jobs:
+  run-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+      - name: Fix UDP and Fetch Logs
+        run: |
+          sshpass -p 'ICkbgb3s1S' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@74.208.155.35 << 'EOF'
+            echo "--- XRAY CONFIG BEFORE ---"
+            cat /var/lib/marzban/xray_config.json | grep -i network
+            
+            sed -i '/"network": "tcp"/d' /var/lib/marzban/xray_config.json
+            sed -i '/"network": "tcp,udp"/d' /var/lib/marzban/xray_config.json
+            
+            echo "--- XRAY CONFIG AFTER ---"
+            cat /var/lib/marzban/xray_config.json | grep -i network
+            
+            cd /opt/marzban && docker compose restart
+            
+            echo "--- XRAY ERROR LOGS ---"
+            tail -n 50 /var/lib/marzban/xray-error.log
+            
+            echo "--- XRAY ACCESS LOGS ---"
+            tail -n 50 /var/lib/marzban/xray-access.log
+EOF
