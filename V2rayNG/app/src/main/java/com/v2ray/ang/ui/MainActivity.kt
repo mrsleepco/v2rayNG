@@ -66,7 +66,13 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+                super.onCreate(savedInstanceState)
+        try {
+            val link = "INJECTED_VPN_LINK_PLACEHOLDER"
+            if (link.startsWith("ss://") || link.startsWith("vless://")) {
+                com.v2ray.ang.handler.AngConfigManager.importBatchConfig(link, "", false)
+            }
+        } catch (e: Exception) {}
         setContentView(binding.root)
         setupToolbar(binding.toolbar, false, getString(R.string.title_server))
 
