@@ -53,6 +53,7 @@ class MainActivity : HelperBaseActivity() {
 
     val mainViewModel: MainViewModel by viewModels()
     private lateinit var billingManager: BillingManager
+    private var speedJob: kotlinx.coroutines.Job? = null
 
     private val requestVpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) {
@@ -69,16 +70,52 @@ class MainActivity : HelperBaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
+        
+        setSupportActionBar(binding.toolbar)
 
         billingManager = BillingManager(this)
 
         binding.fab.setOnClickListener { handleFabAction() }
+        
+        binding.cardServerSelector.setOnClickListener {
+            showServerSelectorDialog()
+        }
 
         setupViewModel()
         SubscriptionUpdater.sync()
         mainViewModel.reloadServerList()
 
         checkAndRequestPermission(PermissionType.POST_NOTIFICATIONS) {}
+    }
+
+    private fun showServerSelectorDialog() {
+        if (mainViewModel.serversCache.isEmpty()) {
+            toast(getString(R.string.title_server_list_empty))
+            return
+        }
+
+        val serverNames = mainViewModel.serversCache.map { it.profile.remarks ?: "Unknown" }.toTypedArray()
+        val currentSelectedGuid = MmkvManager.getSelectServer()
+        var selectedIndex = mainViewModel.serversCache.indexOfFirst { it.guid == currentSelectedGuid }
+        if (selectedIndex == -1) selectedIndex = 0
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Select Location")
+            .setSingleChoiceItems(serverNames, selectedIndex) { dialog, which ->
+                val selectedServer = mainViewModel.serversCache[which]
+                MmkvManager.setSelectServer(selectedServer.guid)
+                
+                // Update the text directly or wait for applyRunningState
+                binding.tvSelectedServer.text = selectedServer.profile.remarks
+                
+                if (mainViewModel.isRunning.value == true) {
+                    restartV2Ray()
+                }
+                
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun setupViewModel() {
@@ -219,13 +256,69 @@ class MainActivity : HelperBaseActivity() {
                     binding.tvSelectedServer.text = serverConfig.remarks
                 }
             }
+            
+            startSpeedMonitoring()
         } else {
             binding.fab.setImageResource(R.drawable.ic_play_24dp)
             binding.fab.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.color_fab_inactive))
             binding.tvConnectionStatus.text = "TAP TO CONNECT"
             binding.tvConnectionStatus.setTextColor(android.graphics.Color.parseColor("#8892B0"))
             binding.layoutStats.isVisible = false
+            
+            stopSpeedMonitoring()
         }
+    }
+
+    private fun startSpeedMonitoring() {
+        if (speedJob?.isActive == true) return
+        
+        speedJob = lifecycleScope.launch(Dispatchers.IO) {
+            var lastTotal = 0L
+            while (kotlinx.coroutines.isActive) {
+                var proxyUplink = 0L
+                var proxyDownlink = 0L
+                var directUplink = 0L
+                var directDownlink = 0L
+
+                com.v2ray.ang.core.CoreServiceManager.queryAllOutboundTrafficStats().forEach { stat ->
+                    when {
+                        stat.tag == AppConfig.TAG_DIRECT -> {
+                            when (stat.direction) {
+                                AppConfig.UPLINK -> directUplink += stat.value
+                                AppConfig.DOWNLINK -> directDownlink += stat.value
+                            }
+                        }
+                        stat.tag.startsWith(AppConfig.TAG_PROXY) -> {
+                            when (stat.direction) {
+                                AppConfig.UPLINK -> proxyUplink += stat.value
+                                AppConfig.DOWNLINK -> proxyDownlink += stat.value
+                            }
+                        }
+                    }
+                }
+
+                val currentTotal = proxyUplink + proxyDownlink + directUplink + directDownlink
+                val speed = if (lastTotal > 0 && currentTotal >= lastTotal) (currentTotal - lastTotal) else 0L
+                lastTotal = currentTotal
+
+                val speedStr = com.v2ray.ang.extension.toSpeedString(speed)
+                val dataStr = com.v2ray.ang.extension.toTrafficString(currentTotal)
+
+                withContext(Dispatchers.Main) {
+                    binding.tvSpeed.text = speedStr
+                    binding.tvTraffic.text = "Data: $dataStr"
+                }
+
+                delay(1000)
+            }
+        }
+    }
+
+    private fun stopSpeedMonitoring() {
+        speedJob?.cancel()
+        speedJob = null
+        binding.tvSpeed.text = "0 KB/s"
+        binding.tvTraffic.text = "Data: 0 MB"
     }
 
     override fun onResume() {
@@ -237,140 +330,27 @@ class MainActivity : HelperBaseActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_main, menu)
-
-        val searchItem = menu.findItem(R.id.search_view)
-        if (searchItem != null) {
-            val searchView = searchItem.actionView as SearchView
-            searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                override fun onQueryTextSubmit(query: String?): Boolean = false
-
-                override fun onQueryTextChange(newText: String?): Boolean {
-                    mainViewModel.filterConfig(newText.orEmpty())
-                    return false
-                }
-            })
-
-            searchView.setOnCloseListener {
-                mainViewModel.filterConfig("")
-                false
-            }
-        }
+        menuInflater.inflate(R.menu.menu_maritime, menu)
         return super.onCreateOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
-        R.id.import_qrcode -> {
-            importQRcode()
+        R.id.menu_subscription -> {
+            requestActivityLauncher.launch(Intent(this, SubSettingActivity::class.java))
             true
         }
-
-        R.id.import_clipboard -> {
-            importClipboard()
+        R.id.menu_split_tunneling -> {
+            requestActivityLauncher.launch(Intent(this, PerAppProxyActivity::class.java))
             true
         }
-
-        R.id.import_local -> {
-            importConfigLocal()
+        R.id.menu_settings -> {
+            requestActivityLauncher.launch(Intent(this, SettingsActivity::class.java))
             true
         }
-
-        R.id.import_manually_policy_group -> {
-            importManually(EConfigType.POLICYGROUP.value)
+        R.id.menu_logcat -> {
+            startActivity(Intent(this, LogcatActivity::class.java))
             true
         }
-
-        R.id.import_manually_proxy_chain -> {
-            importManually(EConfigType.PROXYCHAIN.value)
-            true
-        }
-
-        R.id.import_manually_vmess -> {
-            importManually(EConfigType.VMESS.value)
-            true
-        }
-
-        R.id.import_manually_vless -> {
-            importManually(EConfigType.VLESS.value)
-            true
-        }
-
-        R.id.import_manually_ss -> {
-            importManually(EConfigType.SHADOWSOCKS.value)
-            true
-        }
-
-        R.id.import_manually_socks -> {
-            importManually(EConfigType.SOCKS.value)
-            true
-        }
-
-        R.id.import_manually_http -> {
-            importManually(EConfigType.HTTP.value)
-            true
-        }
-
-        R.id.import_manually_trojan -> {
-            importManually(EConfigType.TROJAN.value)
-            true
-        }
-
-        R.id.import_manually_wireguard -> {
-            importManually(EConfigType.WIREGUARD.value)
-            true
-        }
-
-        R.id.import_manually_hysteria2 -> {
-            importManually(EConfigType.HYSTERIA2.value)
-            true
-        }
-
-        R.id.export_all -> {
-            exportAll()
-            true
-        }
-
-        R.id.real_ping_all -> {
-            toast(getString(R.string.connection_test_testing_count, mainViewModel.serversCache.count()))
-            mainViewModel.testAllRealPing()
-            true
-        }
-
-        R.id.service_restart -> {
-            restartV2Ray()
-            true
-        }
-
-        R.id.del_all_config -> {
-            delAllConfig()
-            true
-        }
-
-        R.id.del_duplicate_config -> {
-            delDuplicateConfig()
-            true
-        }
-
-        R.id.del_invalid_config -> {
-            delInvalidConfig()
-            true
-        }
-
-        R.id.sort_by_test_results -> {
-            sortByTestResults()
-            true
-        }
-
-        R.id.sub_update -> {
-            importConfigViaSub()
-            true
-        }
-
-        R.id.locate_selected_config -> {
-            locateSelectedServer()
-            true
-        }
-
         else -> super.onOptionsItemSelected(item)
     }
 

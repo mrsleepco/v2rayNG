@@ -105,8 +105,7 @@
             <ImageView
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_stat_name"
-                app:tint="#00FFCC" />
+                android:src="@mipmap/ic_launcher" />
                 
             <LinearLayout
                 android:layout_width="0dp"
