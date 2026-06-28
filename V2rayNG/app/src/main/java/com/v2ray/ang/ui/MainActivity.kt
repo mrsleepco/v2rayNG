@@ -46,6 +46,9 @@ import com.v2ray.ang.api.SubscribeRequest
 import com.v2ray.ang.billing.BillingManager
 import com.v2ray.ang.dto.entities.SubscriptionItem
 import com.v2ray.ang.dto.entities.SubscriptionCache
+import com.v2ray.ang.extension.toSpeedString
+import com.v2ray.ang.extension.toTrafficString
+import kotlinx.coroutines.isActive
 class MainActivity : HelperBaseActivity() {
     private val binding by lazy {
         ActivityMainBinding.inflate(layoutInflater)
@@ -90,7 +93,7 @@ class MainActivity : HelperBaseActivity() {
 
     private fun showServerSelectorDialog() {
         if (mainViewModel.serversCache.isEmpty()) {
-            toast(getString(R.string.title_server_list_empty))
+            toast("No servers available")
             return
         }
 
@@ -274,7 +277,7 @@ class MainActivity : HelperBaseActivity() {
         
         speedJob = lifecycleScope.launch(Dispatchers.IO) {
             var lastTotal = 0L
-            while (kotlinx.coroutines.isActive) {
+            while (isActive) {
                 var proxyUplink = 0L
                 var proxyDownlink = 0L
                 var directUplink = 0L
@@ -301,8 +304,8 @@ class MainActivity : HelperBaseActivity() {
                 val speed = if (lastTotal > 0 && currentTotal >= lastTotal) (currentTotal - lastTotal) else 0L
                 lastTotal = currentTotal
 
-                val speedStr = com.v2ray.ang.extension.toSpeedString(speed)
-                val dataStr = com.v2ray.ang.extension.toTrafficString(currentTotal)
+                val speedStr = speed.toSpeedString()
+                val dataStr = currentTotal.toTrafficString()
 
                 withContext(Dispatchers.Main) {
                     binding.tvSpeed.text = speedStr
