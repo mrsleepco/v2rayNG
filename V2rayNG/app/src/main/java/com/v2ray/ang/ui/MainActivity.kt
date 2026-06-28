@@ -323,20 +323,8 @@ class MainActivity : HelperBaseActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
-        R.id.menu_subscription -> {
-            requestActivityLauncher.launch(Intent(this, SubSettingActivity::class.java))
-            true
-        }
         R.id.menu_split_tunneling -> {
             requestActivityLauncher.launch(Intent(this, PerAppProxyActivity::class.java))
-            true
-        }
-        R.id.menu_settings -> {
-            requestActivityLauncher.launch(Intent(this, SettingsActivity::class.java))
-            true
-        }
-        R.id.menu_logcat -> {
-            startActivity(Intent(this, LogcatActivity::class.java))
             true
         }
         else -> super.onOptionsItemSelected(item)
