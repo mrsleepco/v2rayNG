@@ -94,13 +94,13 @@ jobs:
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        ./gradlew assembleTestDebug
+        ./gradlew assembleSandboxDebug
     
     - name: Upload arm64-v8a APK
       uses: actions/upload-artifact@v7
       if: ${{  success() }}
       with:
-        name: MySC-test-arm64-v8a
+        name: MySC-sandbox-arm64-v8a
         path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/debug/*arm64-v8a*.apk
 
 

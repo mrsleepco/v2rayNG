@@ -47,10 +47,10 @@ android {
 
     flavorDimensions.add("distribution")
     productFlavors {
-        create("test") {
+        create("sandbox") {
             dimension = "distribution"
-            applicationIdSuffix = ".test"
-            buildConfigField("String", "DISTRIBUTION", "\"Test\"")
+            applicationIdSuffix = ".sandbox"
+            buildConfigField("String", "DISTRIBUTION", "\"Sandbox\"")
             buildConfigField("Boolean", "SKIP_SUBSCRIPTION", "true")
         }
         create("main") {
@@ -80,8 +80,8 @@ android {
 
     applicationVariants.all {
         val variant = this
-        val isTest = variant.productFlavors.any { it.name == "test" }
-        if (isTest) {
+        val isSandbox = variant.productFlavors.any { it.name == "sandbox" }
+        if (isSandbox) {
             val versionCodes =
                 mapOf(
                     "armeabi-v7a" to 2, "arm64-v8a" to 1, "x86" to 4, "x86_64" to 3, "universal" to 0
@@ -91,7 +91,7 @@ android {
                 .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
                 .forEach { output ->
                     val abi = output.getFilter("ABI") ?: "universal"
-                    output.outputFileName = "MySC_${variant.versionName}-test_${abi}.apk"
+                    output.outputFileName = "MySC_${variant.versionName}-sandbox_${abi}.apk"
                     if (versionCodes.containsKey(abi)) {
                         output.versionCodeOverride =
                             (100 * variant.versionCode + versionCodes[abi]!!).plus(5000000)
