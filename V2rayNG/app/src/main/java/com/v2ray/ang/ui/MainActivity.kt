@@ -44,8 +44,8 @@ import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.api.BackendApiClient
 import com.v2ray.ang.api.SubscribeRequest
 import com.v2ray.ang.billing.BillingManager
-import com.v2ray.ang.dto.SubscriptionItem
-import com.v2ray.ang.dto.SubscriptionCache
+import com.v2ray.ang.dto.entities.SubscriptionItem
+import com.v2ray.ang.dto.entities.SubscriptionCache
 class MainActivity : HelperBaseActivity() {
     private val binding by lazy {
         ActivityMainBinding.inflate(layoutInflater)
@@ -117,19 +117,19 @@ class MainActivity : HelperBaseActivity() {
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     if (BuildConfig.SKIP_SUBSCRIPTION) {
-                        LogUtil.d("SKIP_SUBSCRIPTION is true, using mock flow.")
+                        LogUtil.d(AppConfig.TAG, "SKIP_SUBSCRIPTION is true, using mock flow.")
                         val randomToken = "test_sandbox_token_" + java.util.UUID.randomUUID().toString()
                         val response = BackendApiClient.apiService.subscribe(SubscribeRequest(randomToken))
                         processSubscriptionResponse(response.subscription_url)
                     } else {
-                        LogUtil.d("SKIP_SUBSCRIPTION is false, launching Google Play flow.")
+                        LogUtil.d(AppConfig.TAG, "SKIP_SUBSCRIPTION is false, launching Google Play flow.")
                         withContext(Dispatchers.Main) {
                             billingManager.initiatePurchaseFlow("mysc_monthly_sub_placeholder")
                             applyRunningState(isLoading = false, isRunning = false)
                         }
                     }
                 } catch(e: Exception) {
-                    LogUtil.e("API Error: ${e.message}", e)
+                    LogUtil.e(AppConfig.TAG, "API Error: ${e.message}", e)
                     withContext(Dispatchers.Main) {
                         toast("Connection Error: ${e.message ?: "Unknown Error"}")
                         applyRunningState(isLoading = false, isRunning = false)
@@ -147,7 +147,8 @@ class MainActivity : HelperBaseActivity() {
             subItem.url = subUrl
             subItem.allowInsecureUrl = true
             
-            val newSubId = MmkvManager.encodeSubscription("", subItem)
+            val newSubId = java.util.UUID.randomUUID().toString()
+            MmkvManager.encodeSubscription(newSubId, subItem)
             val subCache = SubscriptionCache(newSubId, subItem)
             
             val result = AngConfigManager.updateConfigViaSub(subCache)
@@ -174,6 +175,24 @@ class MainActivity : HelperBaseActivity() {
             } else {
                 startV2Ray()
             }
+        }
+    }
+
+    private fun startV2Ray() {
+        if (MmkvManager.getSelectServer().isNullOrEmpty()) {
+            toast(R.string.title_file_chooser)
+            return
+        }
+        CoreServiceManager.startVService(this)
+    }
+
+    fun restartV2Ray() {
+        if (mainViewModel.isRunning.value == true) {
+            CoreServiceManager.stopVService(this)
+        }
+        lifecycleScope.launch {
+            delay(500)
+            startV2Ray()
         }
     }
 
@@ -417,10 +436,10 @@ class MainActivity : HelperBaseActivity() {
                         count > 0 -> {
                             toast(getString(R.string.title_import_config_count, count))
                             mainViewModel.reloadServerList()
-                            refreshGroupTabTitles()
+                            // refreshGroupTabTitles()
                         }
 
-                        countSub > 0 -> setupGroupTab()
+                        countSub > 0 -> {} // setupGroupTab()
                         else -> toastError(R.string.toast_failure)
                     }
                     hideLoading()
@@ -473,7 +492,7 @@ class MainActivity : HelperBaseActivity() {
                 }
                 if (result.configCount > 0) {
                     mainViewModel.reloadServerList()
-                    refreshGroupTabTitles()
+                    // refreshGroupTabTitles()
                 }
                 hideLoading()
             }
@@ -503,7 +522,7 @@ class MainActivity : HelperBaseActivity() {
                     val ret = mainViewModel.removeAllServer()
                     launch(Dispatchers.Main) {
                         mainViewModel.reloadServerList()
-                        refreshGroupTabTitles()
+                        // refreshGroupTabTitles()
                         toast(getString(R.string.title_del_config_count, ret))
                         hideLoading()
                     }
@@ -523,7 +542,7 @@ class MainActivity : HelperBaseActivity() {
                     val ret = mainViewModel.removeDuplicateServer()
                     launch(Dispatchers.Main) {
                         mainViewModel.reloadServerList()
-                        refreshGroupTabTitles()
+                        // refreshGroupTabTitles()
                         toast(getString(R.string.title_del_duplicate_config_count, ret))
                         hideLoading()
                     }
@@ -543,7 +562,7 @@ class MainActivity : HelperBaseActivity() {
                     val ret = mainViewModel.removeInvalidServer()
                     launch(Dispatchers.Main) {
                         mainViewModel.reloadServerList()
-                        refreshGroupTabTitles()
+                        // refreshGroupTabTitles()
                         toast(getString(R.string.title_del_config_count, ret))
                         hideLoading()
                     }
