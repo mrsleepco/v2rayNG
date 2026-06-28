@@ -149,91 +149,52 @@ class MainActivity : HelperBaseActivity() {
         
         applyRunningState(isLoading = true, isRunning = false)
         
-        // Use a BottomSheetDialog for Terms of Service (if not already accepted)
-        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
-        val view = layoutInflater.inflate(R.layout.dialog_subscription, null)
-        dialog.setContentView(view)
-        
-        val cbTos = view.findViewById<android.widget.CheckBox>(R.id.cb_tos)
-        val btnSubscribe = view.findViewById<android.widget.Button>(R.id.btn_subscribe)
-        
-        btnSubscribe.setOnClickListener {
-            if (!cbTos.isChecked) {
-                toast("Please agree to the ToS to continue")
-                return@setOnClickListener
-            }
-            dialog.dismiss()
-            applyRunningState(isLoading = true, isRunning = false)
-            
-            lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    if (BuildConfig.SKIP_SUBSCRIPTION) {
-                        LogUtil.d(AppConfig.TAG, "SKIP_SUBSCRIPTION is true, using mock flow.")
-                        val randomToken = "test_sandbox_token_" + java.util.UUID.randomUUID().toString()
-                        val response = BackendApiClient.apiService.subscribe(SubscribeRequest(randomToken))
-                        processSubscriptionResponse(response.subscription_url)
-                    } else {
-                        LogUtil.d(AppConfig.TAG, "SKIP_SUBSCRIPTION is false, launching Google Play flow.")
-                        withContext(Dispatchers.Main) {
-                            billingManager.initiatePurchaseFlow("mysc_monthly_sub_placeholder")
-                            applyRunningState(isLoading = false, isRunning = false)
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                // If we don't have any servers, let's fetch a trial server from the backend via port 5938
+                val selectedServer = MmkvManager.getSelectServer()
+                if (selectedServer.isNullOrEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        binding.tvConnectionStatus.text = "GETTING TRIAL SERVER..."
+                    }
+                    val deviceId = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: java.util.UUID.randomUUID().toString()
+                    val response = com.v2ray.ang.api.TrialApiClient.apiService.registerTrial(
+                        com.v2ray.ang.api.RegisterRequest(deviceId)
+                    )
+                    
+                    if (response.status == "success" && !response.config.isNullOrEmpty()) {
+                        val subid = "mysc_premium_sub"
+                        val (count, _) = AngConfigManager.importBatchConfig(response.config, subid, false)
+                        if (count > 0) {
+                            withContext(Dispatchers.Main) {
+                                mainViewModel.reloadServerList()
+                            }
+                        } else {
+                            throw java.lang.Exception("Failed to parse trial server configuration.")
                         }
-                    }
-                } catch(e: Exception) {
-                    LogUtil.e(AppConfig.TAG, "API Error: ${e.message}", e)
-                    withContext(Dispatchers.Main) {
-                        toast("Connection Error: ${e.message ?: "Unknown Error"}")
-                        applyRunningState(isLoading = false, isRunning = false)
-                    }
-                }
-            }
-        }
-        dialog.show()
-    }
-
-    private suspend fun processSubscriptionResponse(subUrl: String?) {
-        if (subUrl != null) {
-            val subItem = SubscriptionItem()
-            subItem.remarks = "MySC Premium"
-            subItem.url = subUrl
-            subItem.allowInsecureUrl = true
-            
-            val fixedSubId = "mysc_premium_sub"
-            MmkvManager.encodeSubscription(fixedSubId, subItem)
-            val subCache = SubscriptionCache(fixedSubId, subItem)
-            
-            val result = AngConfigManager.updateConfigViaSub(subCache)
-            if (result.successCount > 0) {
-                val newServers = MmkvManager.decodeServerList(fixedSubId)
-                val validServers = mutableListOf<String>()
-                for (guid in newServers) {
-                    val config = MmkvManager.decodeServerConfig(guid)
-                    if (config?.serverPort == "5938") {
-                        validServers.add(guid)
                     } else {
-                        MmkvManager.removeServer(guid)
+                        throw java.lang.Exception("Backend did not return a valid configuration.")
                     }
                 }
-                if (validServers.isNotEmpty()) {
-                    MmkvManager.setSelectServer(validServers[0])
-                    withContext(Dispatchers.Main) {
-                        mainViewModel.reloadServerList()
+                
+                withContext(Dispatchers.Main) {
+                    if (SettingsManager.isVpnMode()) {
+                        val intent = VpnService.prepare(this@MainActivity)
+                        if (intent == null) {
+                            startV2Ray()
+                        } else {
+                            requestVpnPermission.launch(intent)
+                        }
+                    } else {
+                        startV2Ray()
                     }
                 }
-            } else {
-                throw java.lang.Exception("Failed to fetch nodes")
-            }
-        }
-        withContext(Dispatchers.Main) {
-            if (SettingsManager.isVpnMode()) {
-                val intent = VpnService.prepare(this@MainActivity)
-                if (intent == null) {
-                    startV2Ray()
-                } else {
-                    requestVpnPermission.launch(intent)
+            } catch(e: Exception) {
+                LogUtil.e(AppConfig.TAG, "API Error: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    toast("Connection Error: ${e.message ?: "Unknown Error"}")
+                    applyRunningState(isLoading = false, isRunning = false)
                 }
-            } else {
-                startV2Ray()
             }
         }
     }
