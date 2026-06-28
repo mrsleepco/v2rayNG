@@ -40,15 +40,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelectedListener {
+import com.v2ray.ang.BuildConfig
+import com.v2ray.ang.api.BackendApiClient
+import com.v2ray.ang.api.SubscribeRequest
+import com.v2ray.ang.billing.BillingManager
+import com.v2ray.ang.dto.SubscriptionItem
+import com.v2ray.ang.dto.SubscriptionCache
+class MainActivity : HelperBaseActivity() {
     private val binding by lazy {
         ActivityMainBinding.inflate(layoutInflater)
     }
 
     val mainViewModel: MainViewModel by viewModels()
-    private lateinit var groupPagerAdapter: GroupPagerAdapter
-    private var tabMediator: TabLayoutMediator? = null
+    private lateinit var billingManager: BillingManager
 
     private val requestVpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) {
@@ -59,74 +63,25 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
         if (SettingsChangeManager.consumeRestartService() && mainViewModel.isRunning.value == true) {
             restartV2Ray()
         }
-        if (SettingsChangeManager.consumeSetupGroupTab()) {
-            setupGroupTab()
-        }
     }
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
-                super.onCreate(savedInstanceState)
-        try {
-            val link = "INJECTED_VPN_LINK_PLACEHOLDER"
-            if (link.startsWith("ss://") || link.startsWith("vless://")) {
-                com.v2ray.ang.handler.AngConfigManager.importBatchConfig(link, "", false)
-                val list = com.v2ray.ang.handler.MmkvManager.decodeServerList("")
-                if (list.isNotEmpty()) {
-                    com.v2ray.ang.handler.MmkvManager.setSelectServer(list[0])
-                }
-            }
-        } catch (e: Exception) {}
+        super.onCreate(savedInstanceState)
         setContentView(binding.root)
-        setupToolbar(binding.toolbar, false, getString(R.string.title_server))
 
-        // setup viewpager and tablayout
-        groupPagerAdapter = GroupPagerAdapter(this, emptyList())
-        binding.viewPager.adapter = groupPagerAdapter
-        binding.viewPager.isUserInputEnabled = true
-
-        // setup navigation drawer
-        setupNavigationDrawer()
+        billingManager = BillingManager(this)
 
         binding.fab.setOnClickListener { handleFabAction() }
-        binding.layoutTest.setOnClickListener { handleLayoutTestClick() }
 
-        setupGroupTab()
         setupViewModel()
         SubscriptionUpdater.sync()
         mainViewModel.reloadServerList()
 
-        checkAndRequestPermission(PermissionType.POST_NOTIFICATIONS) {
-        }
-    }
-
-    private fun setupNavigationDrawer() {
-        val toggle = ActionBarDrawerToggle(
-            this,
-            binding.drawerLayout,
-            binding.toolbar,
-            R.string.navigation_drawer_open,
-            R.string.navigation_drawer_close
-        )
-        binding.drawerLayout.addDrawerListener(toggle)
-        toggle.syncState()
-        binding.navView.setNavigationItemSelectedListener(this)
-
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
-                    binding.drawerLayout.closeDrawer(GravityCompat.START)
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                    isEnabled = true
-                }
-            }
-        })
+        checkAndRequestPermission(PermissionType.POST_NOTIFICATIONS) {}
     }
 
     private fun setupViewModel() {
-        mainViewModel.updateTestResultAction.observe(this) { setTestState(it) }
         mainViewModel.isRunning.observe(this) { isRunning ->
             applyRunningState(false, isRunning)
         }
@@ -134,110 +89,123 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
         mainViewModel.initAssets(assets)
     }
 
-    private fun setupGroupTab() {
-        val groups = mainViewModel.getSubscriptions(this)
-        groupPagerAdapter.update(groups)
-
-        tabMediator?.detach()
-        tabMediator = TabLayoutMediator(binding.tabGroup, binding.viewPager) { tab, position ->
-            groupPagerAdapter.groups.getOrNull(position)?.let {
-                tab.text = it.remarks
-                tab.tag = it.id
-            }
-        }.also { it.attach() }
-
-        val targetIndex = groups.indexOfFirst { it.id == mainViewModel.subscriptionId }.takeIf { it >= 0 } ?: (groups.size - 1)
-        binding.viewPager.setCurrentItem(targetIndex, false)
-
-        binding.tabGroup.isVisible = groups.size > 1
-        refreshGroupTabTitles(true)
-    }
-
-    fun refreshGroupTabTitles(refreshAll: Boolean = false) {
-        val groupsToRefresh = if (refreshAll || mainViewModel.subscriptionId.isEmpty()) {
-            groupPagerAdapter.groups
-        } else {
-            groupPagerAdapter.groups.filter { it.id == mainViewModel.subscriptionId }
-        }
-
-        groupsToRefresh.forEach { group ->
-            if (group.id.isEmpty()) {
-                return@forEach
-            }
-            val tabIndex = groupPagerAdapter.groups.indexOfFirst { it.id == group.id }
-            if (tabIndex >= 0) {
-                val count = MmkvManager.decodeServerList(group.id).size
-                binding.tabGroup.getTabAt(tabIndex)?.text = "${group.remarks} ($count)"
-            }
-        }
-    }
-
     private fun handleFabAction() {
-        applyRunningState(isLoading = true, isRunning = false)
-
         if (mainViewModel.isRunning.value == true) {
+            applyRunningState(isLoading = true, isRunning = false)
             CoreServiceManager.stopVService(this)
-        } else if (SettingsManager.isVpnMode()) {
-            val intent = VpnService.prepare(this)
-            if (intent == null) {
-                startV2Ray()
-            } else {
-                requestVpnPermission.launch(intent)
-            }
-        } else {
-            startV2Ray()
-        }
-    }
-
-    private fun handleLayoutTestClick() {
-        if (mainViewModel.isRunning.value == true) {
-            setTestState(getString(R.string.connection_test_testing))
-            mainViewModel.testCurrentServerRealPing()
-        } else {
-            // service not running: keep existing no-op (could show a message if desired)
-        }
-    }
-
-    private fun startV2Ray() {
-        if (MmkvManager.getSelectServer().isNullOrEmpty()) {
-            toast(R.string.title_file_chooser)
             return
         }
-        CoreServiceManager.startVService(this)
+        
+        applyRunningState(isLoading = true, isRunning = false)
+        
+        // Use a BottomSheetDialog for Terms of Service (if not already accepted)
+        val dialog = com.google.android.material.bottomsheet.BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_subscription, null)
+        dialog.setContentView(view)
+        
+        val cbTos = view.findViewById<android.widget.CheckBox>(R.id.cb_tos)
+        val btnSubscribe = view.findViewById<android.widget.Button>(R.id.btn_subscribe)
+        
+        btnSubscribe.setOnClickListener {
+            if (!cbTos.isChecked) {
+                toast("Please agree to the ToS to continue")
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            applyRunningState(isLoading = true, isRunning = false)
+            
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    if (BuildConfig.SKIP_SUBSCRIPTION) {
+                        LogUtil.d("SKIP_SUBSCRIPTION is true, using mock flow.")
+                        val randomToken = "test_sandbox_token_" + java.util.UUID.randomUUID().toString()
+                        val response = BackendApiClient.apiService.subscribe(SubscribeRequest(randomToken))
+                        processSubscriptionResponse(response.subscription_url)
+                    } else {
+                        LogUtil.d("SKIP_SUBSCRIPTION is false, launching Google Play flow.")
+                        withContext(Dispatchers.Main) {
+                            billingManager.initiatePurchaseFlow("mysc_monthly_sub_placeholder")
+                            applyRunningState(isLoading = false, isRunning = false)
+                        }
+                    }
+                } catch(e: Exception) {
+                    LogUtil.e("API Error: ${e.message}", e)
+                    withContext(Dispatchers.Main) {
+                        toast("Connection Error: ${e.message ?: "Unknown Error"}")
+                        applyRunningState(isLoading = false, isRunning = false)
+                    }
+                }
+            }
+        }
+        dialog.show()
     }
 
-    fun restartV2Ray() {
-        if (mainViewModel.isRunning.value == true) {
-            CoreServiceManager.stopVService(this)
+    private suspend fun processSubscriptionResponse(subUrl: String?) {
+        if (subUrl != null) {
+            val subItem = SubscriptionItem()
+            subItem.remarks = "MySC Premium"
+            subItem.url = subUrl
+            subItem.allowInsecureUrl = true
+            
+            val newSubId = MmkvManager.encodeSubscription("", subItem)
+            val subCache = SubscriptionCache(newSubId, subItem)
+            
+            val result = AngConfigManager.updateConfigViaSub(subCache)
+            if (result.successCount > 0) {
+                val newServers = MmkvManager.decodeServerList(newSubId)
+                if (newServers.isNotEmpty()) {
+                    MmkvManager.setSelectServer(newServers[0])
+                    withContext(Dispatchers.Main) {
+                        mainViewModel.reloadServerList()
+                    }
+                }
+            } else {
+                throw java.lang.Exception("Failed to fetch nodes")
+            }
         }
-        lifecycleScope.launch {
-            delay(500)
-            startV2Ray()
+        withContext(Dispatchers.Main) {
+            if (SettingsManager.isVpnMode()) {
+                val intent = VpnService.prepare(this@MainActivity)
+                if (intent == null) {
+                    startV2Ray()
+                } else {
+                    requestVpnPermission.launch(intent)
+                }
+            } else {
+                startV2Ray()
+            }
         }
-    }
-
-    private fun setTestState(content: String?) {
-        binding.tvTestState.text = content
     }
 
     private fun applyRunningState(isLoading: Boolean, isRunning: Boolean) {
         if (isLoading) {
             binding.fab.setImageResource(R.drawable.ic_fab_check)
+            binding.tvConnectionStatus.text = "CONNECTING..."
+            binding.tvConnectionStatus.setTextColor(android.graphics.Color.parseColor("#8892B0"))
             return
         }
 
         if (isRunning) {
             binding.fab.setImageResource(R.drawable.ic_stop_24dp)
             binding.fab.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.color_fab_active))
-            binding.fab.contentDescription = getString(R.string.action_stop_service)
-            setTestState(getString(R.string.connection_connected))
-            binding.layoutTest.isFocusable = true
+            binding.tvConnectionStatus.text = "CONNECTED"
+            binding.tvConnectionStatus.setTextColor(android.graphics.Color.parseColor("#00FFCC"))
+            
+            // Show stats layout and change selected server text
+            binding.layoutStats.isVisible = true
+            val currentServer = MmkvManager.getSelectServer()
+            if (!currentServer.isNullOrEmpty()) {
+                val serverConfig = MmkvManager.decodeServerConfig(currentServer)
+                if (serverConfig != null) {
+                    binding.tvSelectedServer.text = serverConfig.remarks
+                }
+            }
         } else {
             binding.fab.setImageResource(R.drawable.ic_play_24dp)
             binding.fab.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.color_fab_inactive))
-            binding.fab.contentDescription = getString(R.string.tasker_start_service)
-            setTestState(getString(R.string.connection_not_connected))
-            binding.layoutTest.isFocusable = false
+            binding.tvConnectionStatus.text = "TAP TO CONNECT"
+            binding.tvConnectionStatus.setTextColor(android.graphics.Color.parseColor("#8892B0"))
+            binding.layoutStats.isVisible = false
         }
     }
 
@@ -629,25 +597,7 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
      * If the selected server is in a different group, automatically switches to that group first.
      */
     private fun locateSelectedServer() {
-        val targetSubscriptionId = mainViewModel.findSubscriptionIdBySelect()
-        if (targetSubscriptionId.isNullOrEmpty()) {
-            toast(R.string.title_file_chooser)
-            return
-        }
-
-        val targetGroupIndex = groupPagerAdapter.groups.indexOfFirst { it.id == targetSubscriptionId }
-        if (targetGroupIndex < 0) {
-            toast(R.string.toast_server_not_found_in_group)
-            return
-        }
-
-        // Switch to target group if needed, then scroll to the server
-        if (binding.viewPager.currentItem != targetGroupIndex) {
-            binding.viewPager.setCurrentItem(targetGroupIndex, true)
-            binding.viewPager.postDelayed({ scrollToSelectedServer(targetGroupIndex) }, 1000)
-        } else {
-            scrollToSelectedServer(targetGroupIndex)
-        }
+        // Obsolete UI, removed.
     }
 
     /**
@@ -655,14 +605,7 @@ class MainActivity : HelperBaseActivity(), NavigationView.OnNavigationItemSelect
      * @param groupIndex The index of the group/fragment to scroll in
      */
     private fun scrollToSelectedServer(groupIndex: Int) {
-        val itemId = groupPagerAdapter.getItemId(groupIndex)
-        val fragment = supportFragmentManager.findFragmentByTag("f$itemId") as? GroupServerFragment
-
-        if (fragment?.isAdded == true && fragment.view != null) {
-            fragment.scrollToSelectedServer()
-        } else {
-            toast(R.string.toast_fragment_not_available)
-        }
+        // Obsolete UI, removed.
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {

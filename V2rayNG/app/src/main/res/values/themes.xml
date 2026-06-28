@@ -78,4 +78,9 @@
         <item name="colorPrimary">@color/color_fab_active</item>
     </style>
 
+    <style name="ShapeAppearanceOverlay.MyApp.FloatingActionButton.Circle" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
 </resources>

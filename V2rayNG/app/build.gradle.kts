@@ -9,7 +9,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.marzban.vpn"
+        applicationId = "com.mysc.vpn"
         minSdk = 24
         targetSdk = 37
         versionCode = 735
@@ -47,14 +47,16 @@ android {
 
     flavorDimensions.add("distribution")
     productFlavors {
-        create("fdroid") {
+        create("test") {
             dimension = "distribution"
-            applicationIdSuffix = ".fdroid"
-            buildConfigField("String", "DISTRIBUTION", "\"F-Droid\"")
+            applicationIdSuffix = ".test"
+            buildConfigField("String", "DISTRIBUTION", "\"Test\"")
+            buildConfigField("Boolean", "SKIP_SUBSCRIPTION", "true")
         }
-        create("playstore") {
+        create("main") {
             dimension = "distribution"
-            buildConfigField("String", "DISTRIBUTION", "\"Play Store\"")
+            buildConfigField("String", "DISTRIBUTION", "\"Main\"")
+            buildConfigField("Boolean", "SKIP_SUBSCRIPTION", "false")
         }
     }
 
@@ -78,8 +80,8 @@ android {
 
     applicationVariants.all {
         val variant = this
-        val isFdroid = variant.productFlavors.any { it.name == "fdroid" }
-        if (isFdroid) {
+        val isTest = variant.productFlavors.any { it.name == "test" }
+        if (isTest) {
             val versionCodes =
                 mapOf(
                     "armeabi-v7a" to 2, "arm64-v8a" to 1, "x86" to 4, "x86_64" to 3, "universal" to 0
@@ -89,7 +91,7 @@ android {
                 .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
                 .forEach { output ->
                     val abi = output.getFilter("ABI") ?: "universal"
-                    output.outputFileName = "JoPN01_${variant.versionName}-fdroid_${abi}.apk"
+                    output.outputFileName = "MySC_${variant.versionName}-test_${abi}.apk"
                     if (versionCodes.containsKey(abi)) {
                         output.versionCodeOverride =
                             (100 * variant.versionCode + versionCodes[abi]!!).plus(5000000)
@@ -109,7 +111,7 @@ android {
                     else
                         "universal"
 
-                    output.outputFileName = "JoPN01_${variant.versionName}_${abi}.apk"
+                    output.outputFileName = "MySC_${variant.versionName}_${abi}.apk"
                     if (versionCodes.containsKey(abi)) {
                         output.versionCodeOverride =
                             (1000000 * versionCodes[abi]!!).plus(variant.versionCode)
@@ -134,6 +136,12 @@ android {
 }
 
 dependencies {
+    // Networking & Billing
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("com.android.billingclient:billing:6.0.1")
+
     // Core Libraries
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 

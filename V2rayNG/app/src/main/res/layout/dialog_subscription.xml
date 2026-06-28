@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#112240"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Premium Access Required"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
+        
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Get a 3-Day Free Trial, then $13.49/month."
+        android:textColor="#00FFCC"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="We are a strict ZERO-LOGS VPN.\nWe do not collect, store, or share your IP, browsing history, or DNS queries. Your privacy at sea is fully guaranteed."
+        android:textColor="#8892B0"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:layout_marginBottom="24dp" />
+
+    <CheckBox
+        android:id="@+id/cb_tos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="I agree to the Terms of Service &amp; Privacy Policy"
+        android:textColor="#FFFFFF"
+        android:buttonTint="#00FFCC"
+        android:layout_marginBottom="24dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_subscribe"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:text="Start 3-Day Free Trial"
+        android:textColor="#112240"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:backgroundTint="#00FFCC"
+        app:cornerRadius="12dp" />
+
+</LinearLayout>

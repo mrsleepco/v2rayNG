@@ -94,17 +94,13 @@ jobs:
         cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         chmod 755 gradlew
-        
-        sed -i "s|INJECTED_VPN_LINK_PLACEHOLDER|${{ github.event.inputs.sub_link }}|g" app/src/main/java/com/v2ray/ang/ui/MainActivity.kt
-        sed -i "s|applicationId = \"com.marzban.vpn\"|applicationId = \"com.jopn.vpn01.${{ github.event.inputs.sub_name }}\"|g" app/build.gradle.kts
-        sed -i "s|<string name=\"app_name\" translatable=\"false\">JoPN</string>|<string name=\"app_name\" translatable=\"false\">JoPN01 ${{ github.event.inputs.sub_name }}</string>|g" app/src/main/res/values/strings.xml
-        ./gradlew assembleDebug
+        ./gradlew assembleTestDebug
     
     - name: Upload arm64-v8a APK
       uses: actions/upload-artifact@v7
       if: ${{  success() }}
       with:
-        name: arm64-v8a
+        name: MySC-test-arm64-v8a
         path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/debug/*arm64-v8a*.apk
 
 
