@@ -327,6 +327,10 @@ class MainActivity : HelperBaseActivity() {
             requestActivityLauncher.launch(Intent(this, PerAppProxyActivity::class.java))
             true
         }
+        R.id.menu_logcat -> {
+            startActivity(Intent(this, LogcatActivity::class.java))
+            true
+        }
         else -> super.onOptionsItemSelected(item)
     }
 
