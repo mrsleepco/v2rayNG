@@ -267,6 +267,17 @@ object NotificationManager {
             )
             updateNotification(text.toString(), proxyTotal, directTotal)
         }
+        
+        // Broadcast speed and delta so MainActivity can consume it without querying core
+        try {
+            val speedIntent = android.content.Intent("com.mysc.vpn.SPEED_UPDATE")
+            speedIntent.putExtra("speed", ((proxyTotal + directTotal) / sinceLastQueryInSeconds).toLong())
+            speedIntent.putExtra("data_delta", proxyTotal + directTotal)
+            getService()?.sendBroadcast(speedIntent)
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Error broadcasting speed", e)
+        }
+        
         lastQueryTime = queryTime
         return zeroSpeed
     }

@@ -56,7 +56,18 @@ class MainActivity : HelperBaseActivity() {
 
     val mainViewModel: MainViewModel by viewModels()
     private lateinit var billingManager: BillingManager
-    private var speedJob: kotlinx.coroutines.Job? = null
+    private var totalData = 0L
+    private val speedReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == "com.mysc.vpn.SPEED_UPDATE") {
+                val speed = intent.getLongExtra("speed", 0L)
+                val dataDelta = intent.getLongExtra("data_delta", 0L)
+                totalData += dataDelta
+                binding.tvSpeed.text = speed.toSpeedString()
+                binding.tvTraffic.text = "Data: " + totalData.toTrafficString()
+            }
+        }
+    }
 
     private val requestVpnPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) {
@@ -187,15 +198,24 @@ class MainActivity : HelperBaseActivity() {
             subItem.url = subUrl
             subItem.allowInsecureUrl = true
             
-            val newSubId = java.util.UUID.randomUUID().toString()
-            MmkvManager.encodeSubscription(newSubId, subItem)
-            val subCache = SubscriptionCache(newSubId, subItem)
+            val fixedSubId = "mysc_premium_sub"
+            MmkvManager.encodeSubscription(fixedSubId, subItem)
+            val subCache = SubscriptionCache(fixedSubId, subItem)
             
             val result = AngConfigManager.updateConfigViaSub(subCache)
             if (result.successCount > 0) {
-                val newServers = MmkvManager.decodeServerList(newSubId)
-                if (newServers.isNotEmpty()) {
-                    MmkvManager.setSelectServer(newServers[0])
+                val newServers = MmkvManager.decodeServerList(fixedSubId)
+                val validServers = mutableListOf<String>()
+                for (guid in newServers) {
+                    val config = MmkvManager.decodeServerConfig(guid)
+                    if (config?.serverPort == "5938") {
+                        validServers.add(guid)
+                    } else {
+                        MmkvManager.removeServer(guid)
+                    }
+                }
+                if (validServers.isNotEmpty()) {
+                    MmkvManager.setSelectServer(validServers[0])
                     withContext(Dispatchers.Main) {
                         mainViewModel.reloadServerList()
                     }
@@ -273,53 +293,18 @@ class MainActivity : HelperBaseActivity() {
     }
 
     private fun startSpeedMonitoring() {
-        if (speedJob?.isActive == true) return
-        
-        speedJob = lifecycleScope.launch(Dispatchers.IO) {
-            var lastTotal = 0L
-            while (isActive) {
-                var proxyUplink = 0L
-                var proxyDownlink = 0L
-                var directUplink = 0L
-                var directDownlink = 0L
-
-                com.v2ray.ang.core.CoreServiceManager.queryAllOutboundTrafficStats().forEach { stat ->
-                    when {
-                        stat.tag == AppConfig.TAG_DIRECT -> {
-                            when (stat.direction) {
-                                AppConfig.UPLINK -> directUplink += stat.value
-                                AppConfig.DOWNLINK -> directDownlink += stat.value
-                            }
-                        }
-                        stat.tag.startsWith(AppConfig.TAG_PROXY) -> {
-                            when (stat.direction) {
-                                AppConfig.UPLINK -> proxyUplink += stat.value
-                                AppConfig.DOWNLINK -> proxyDownlink += stat.value
-                            }
-                        }
-                    }
-                }
-
-                val currentTotal = proxyUplink + proxyDownlink + directUplink + directDownlink
-                val speed = if (lastTotal > 0 && currentTotal >= lastTotal) (currentTotal - lastTotal) else 0L
-                lastTotal = currentTotal
-
-                val speedStr = speed.toSpeedString()
-                val dataStr = currentTotal.toTrafficString()
-
-                withContext(Dispatchers.Main) {
-                    binding.tvSpeed.text = speedStr
-                    binding.tvTraffic.text = "Data: $dataStr"
-                }
-
-                delay(1000)
-            }
+        totalData = 0L
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(speedReceiver, android.content.IntentFilter("com.mysc.vpn.SPEED_UPDATE"), android.content.Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(speedReceiver, android.content.IntentFilter("com.mysc.vpn.SPEED_UPDATE"))
         }
     }
 
     private fun stopSpeedMonitoring() {
-        speedJob?.cancel()
-        speedJob = null
+        try {
+            unregisterReceiver(speedReceiver)
+        } catch (e: Exception) {}
         binding.tvSpeed.text = "0 KB/s"
         binding.tvTraffic.text = "Data: 0 MB"
     }
