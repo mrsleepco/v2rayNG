@@ -166,6 +166,10 @@ class MainActivity : HelperBaseActivity() {
                         val subid = "mysc_premium_sub"
                         val (count, _) = AngConfigManager.importBatchConfig(response.config, subid, false)
                         if (count > 0) {
+                            val newServers = MmkvManager.decodeServerList(subid)
+                            if (newServers.isNotEmpty()) {
+                                MmkvManager.setSelectServer(newServers[0])
+                            }
                             withContext(Dispatchers.Main) {
                                 mainViewModel.reloadServerList()
                             }
@@ -202,6 +206,7 @@ class MainActivity : HelperBaseActivity() {
     private fun startV2Ray() {
         if (MmkvManager.getSelectServer().isNullOrEmpty()) {
             toast(R.string.title_file_chooser)
+            applyRunningState(isLoading = false, isRunning = false)
             return
         }
         CoreServiceManager.startVService(this)
