@@ -5,8 +5,4 @@
         android:id="@+id/menu_split_tunneling"
         android:title="Split Tunneling"
         app:showAsAction="never" />
-    <item
-        android:id="@+id/menu_logcat"
-        android:title="Export Logs"
-        app:showAsAction="never" />
 </menu>

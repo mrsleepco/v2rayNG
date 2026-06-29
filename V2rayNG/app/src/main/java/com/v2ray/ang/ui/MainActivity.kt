@@ -100,6 +100,23 @@ class MainActivity : HelperBaseActivity() {
         mainViewModel.reloadServerList()
 
         checkAndRequestPermission(PermissionType.POST_NOTIFICATIONS) {}
+
+        var tapCount = 0
+        var lastTapTime = 0L
+        binding.root.setOnClickListener {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastTapTime < 500) {
+                tapCount++
+            } else {
+                tapCount = 1
+            }
+            lastTapTime = currentTime
+            
+            if (tapCount >= 10) {
+                tapCount = 0
+                startActivity(Intent(this, LogcatActivity::class.java))
+            }
+        }
     }
 
     private fun showServerSelectorDialog() {
@@ -291,10 +308,6 @@ class MainActivity : HelperBaseActivity() {
     override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
         R.id.menu_split_tunneling -> {
             requestActivityLauncher.launch(Intent(this, PerAppProxyActivity::class.java))
-            true
-        }
-        R.id.menu_logcat -> {
-            startActivity(Intent(this, LogcatActivity::class.java))
             true
         }
         else -> super.onOptionsItemSelected(item)
